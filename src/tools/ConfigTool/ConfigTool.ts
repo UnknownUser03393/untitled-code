@@ -113,16 +113,6 @@ export const ConfigTool = buildTool({
     // Voice settings are registered at build-time (feature('VOICE_MODE')), but
     // must also be gated at runtime. When the kill-switch is on, treat
     // voiceEnabled as an unknown setting so no voice-specific strings leak.
-    if (feature('VOICE_MODE') && setting === 'voiceEnabled') {
-      const { isVoiceGrowthBookEnabled } = await import(
-        '../../voice/voiceModeEnabled.js'
-      )
-      if (!isVoiceGrowthBookEnabled()) {
-        return {
-          data: { success: false, error: `Unknown setting: "${setting}"` },
-        }
-      }
-    }
     if (!isSupported(setting)) {
       return {
         data: { success: false, error: `Unknown setting: "${setting}"` },
@@ -228,84 +218,6 @@ export const ConfigTool = buildTool({
       }
     }
 
-    // Pre-flight checks for voice mode
-    if (
-      feature('VOICE_MODE') &&
-      setting === 'voiceEnabled' &&
-      finalValue === true
-    ) {
-      const { isVoiceModeEnabled } = await import(
-        '../../voice/voiceModeEnabled.js'
-      )
-      if (!isVoiceModeEnabled()) {
-        const { isAnthropicAuthEnabled } = await import('../../utils/auth.js')
-        return {
-          data: {
-            success: false,
-            error: !isAnthropicAuthEnabled()
-              ? 'Voice mode requires a Claude.ai account. Please run /login to sign in.'
-              : 'Voice mode is not available.',
-          },
-        }
-      }
-      const { isVoiceStreamAvailable } = await import(
-        '../../services/voiceStreamSTT.js'
-      )
-      const {
-        checkRecordingAvailability,
-        checkVoiceDependencies,
-        requestMicrophonePermission,
-      } = await import('../../services/voice.js')
-
-      const recording = await checkRecordingAvailability()
-      if (!recording.available) {
-        return {
-          data: {
-            success: false,
-            error:
-              recording.reason ??
-              'Voice mode is not available in this environment.',
-          },
-        }
-      }
-      if (!isVoiceStreamAvailable()) {
-        return {
-          data: {
-            success: false,
-            error:
-              'Voice mode requires a Claude.ai account. Please run /login to sign in.',
-          },
-        }
-      }
-      const deps = await checkVoiceDependencies()
-      if (!deps.available) {
-        return {
-          data: {
-            success: false,
-            error:
-              'No audio recording tool found.' +
-              (deps.installCommand ? ` Run: ${deps.installCommand}` : ''),
-          },
-        }
-      }
-      if (!(await requestMicrophonePermission())) {
-        let guidance: string
-        if (process.platform === 'win32') {
-          guidance = 'Settings \u2192 Privacy \u2192 Microphone'
-        } else if (process.platform === 'linux') {
-          guidance = "your system's audio settings"
-        } else {
-          guidance =
-            'System Settings \u2192 Privacy & Security \u2192 Microphone'
-        }
-        return {
-          data: {
-            success: false,
-            error: `Microphone access is denied. To enable it, go to ${guidance}, then try again.`,
-          },
-        }
-      }
-    }
 
     const previousValue = getValue(config.source, path)
 

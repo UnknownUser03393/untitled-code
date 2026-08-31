@@ -323,19 +323,6 @@ const externalTips: Tip[] = [
     },
   },
   {
-    id: 'install-github-app',
-    content: async () =>
-      'Run /install-github-app to tag @claude right from your Github issues and PRs',
-    cooldownSessions: 10,
-    isRelevant: async () => !getGlobalConfig().githubActionSetupCount,
-  },
-  {
-    id: 'install-slack-app',
-    content: async () => 'Run /install-slack-app to use Claude in Slack',
-    cooldownSessions: 10,
-    isRelevant: async () => !getGlobalConfig().slackAppInstallCount,
-  },
-  {
     id: 'permissions',
     content: async () =>
       'Use /permissions to pre-approve and pre-deny bash, edit, and MCP tools',
@@ -435,38 +422,9 @@ const externalTips: Tip[] = [
     },
   },
   {
-    id: 'desktop-app',
-    content: async () =>
-      'Run Claude Code locally or remotely using the Claude desktop app: clau.de/desktop',
-    cooldownSessions: 15,
-    isRelevant: async () => getPlatform() !== 'linux',
-  },
-  {
-    id: 'desktop-shortcut',
-    content: async ctx => {
-      const blue = color('suggestion', ctx.theme)
-      return `Continue your session in Claude Code Desktop with ${blue('/desktop')}`
-    },
-    cooldownSessions: 15,
-    isRelevant: async () => {
-      if (!getDesktopUpsellConfig().enable_shortcut_tip) return false
-      return (
-        process.platform === 'darwin' ||
-        (process.platform === 'win32' && process.arch === 'x64')
-      )
-    },
-  },
-  {
     id: 'web-app',
     content: async () =>
       'Run tasks in the cloud while you keep coding locally · clau.de/web',
-    cooldownSessions: 15,
-    isRelevant: async () => true,
-  },
-  {
-    id: 'mobile-app',
-    content: async () =>
-      '/mobile to use Claude Code from the Claude app on your phone',
     cooldownSessions: 15,
     isRelevant: async () => true,
   },

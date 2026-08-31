@@ -10,7 +10,6 @@ import clear from './commands/clear/index.js'
 import color from './commands/color/index.js'
 import commit from './commands/commit.js'
 import copy from './commands/copy/index.js'
-import desktop from './commands/desktop/index.js'
 import commitPushPr from './commands/commit-push-pr.js'
 import compact from './commands/compact/index.js'
 import config from './commands/config/index.js'
@@ -27,11 +26,8 @@ import initVerifiers from './commands/init-verifiers.js'
 import keybindings from './commands/keybindings/index.js'
 import login from './commands/login/index.js'
 import logout from './commands/logout/index.js'
-import installGitHubApp from './commands/install-github-app/index.js'
-import installSlackApp from './commands/install-slack-app/index.js'
 import breakCache from './commands/break-cache/index.js'
 import mcp from './commands/mcp/index.js'
-import mobile from './commands/mobile/index.js'
 import onboarding from './commands/onboarding/index.js'
 import pr_comments from './commands/pr_comments/index.js'
 import releaseNotes from './commands/release-notes/index.js'
@@ -147,8 +143,6 @@ import {
 import antTrace from './commands/ant-trace/index.js'
 import perfIssue from './commands/perf-issue/index.js'
 import sandboxToggle from './commands/sandbox-toggle/index.js'
-import chrome from './commands/chrome/index.js'
-import stickers from './commands/stickers/index.js'
 import advisor from './commands/advisor.js'
 import { logError } from './utils/log.js'
 import { toError } from './utils/errors.js'
@@ -262,13 +256,11 @@ const COMMANDS = memoize((): Command[] => [
   agents,
   branch,
   btw,
-  chrome,
   clear,
   color,
   compact,
   config,
   copy,
-  desktop,
   context,
   contextNonInteractive,
   cost,
@@ -283,11 +275,8 @@ const COMMANDS = memoize((): Command[] => [
   ide,
   init,
   keybindings,
-  installGitHubApp,
-  installSlackApp,
   mcp,
   memory,
-  mobile,
   model,
   outputStyle,
   providers,
@@ -303,7 +292,6 @@ const COMMANDS = memoize((): Command[] => [
   stats,
   status,
   statusline,
-  stickers,
   tag,
   theme,
   feedback,
@@ -634,8 +622,6 @@ export const REMOTE_SAFE_COMMANDS: Set<Command> = new Set([
   plan, // Plan mode toggle
   keybindings, // Keybinding management
   statusline, // Status line toggle
-  stickers, // Stickers
-  mobile, // Mobile QR code
 ])
 
 /**
