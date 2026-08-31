@@ -136,17 +136,8 @@ export async function sideQuery(opts: SideQueryOptions): Promise<BetaMessage> {
     betas.push(STRUCTURED_OUTPUTS_BETA_HEADER)
   }
 
-  // Extract first user message text for fingerprint
-  const messageText = extractFirstUserMessageText(messages)
-
-  // Compute fingerprint for OAuth attribution
-  const fingerprint = computeFingerprint(messageText, MACRO.VERSION)
-  const attributionHeader = getAttributionHeader(fingerprint)
-
-  // Build system as array to keep attribution header in its own block
-  // (prevents server-side parsing from including system content in cc_entrypoint)
+  // Build system as array
   const systemBlocks: TextBlockParam[] = [
-    attributionHeader ? { type: 'text', text: attributionHeader } : null,
     // Skip CLI system prompt prefix for internal classifiers that provide their own prompt
     ...(skipSystemPromptPrefix
       ? []

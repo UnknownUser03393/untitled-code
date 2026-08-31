@@ -94,8 +94,7 @@ function logEventAsyncImpl(
  * Called from main.tsx during setupBackend().
  */
 export function initializeAnalyticsGates(): void {
-  isDatadogGateEnabled =
-    checkStatsigFeatureGate_CACHED_MAY_BE_STALE(DATADOG_GATE_NAME)
+  // Analytics removed in this build (no-op).
 }
 
 /**
@@ -107,8 +106,5 @@ export function initializeAnalyticsGates(): void {
  * Idempotent: safe to call multiple times (subsequent calls are no-ops).
  */
 export function initializeAnalyticsSink(): void {
-  attachAnalyticsSink({
-    logEvent: logEventImpl,
-    logEventAsync: logEventAsyncImpl,
-  })
+  // Analytics removed in this build (no-op): sink never attaches.
 }

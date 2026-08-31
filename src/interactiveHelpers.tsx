@@ -147,7 +147,6 @@ export async function showSetupScreens(root: Root, permissionMode: PermissionMod
     // Defense for login/logout: clears any prior client so the next init
     // picks up fresh auth headers.
     resetGrowthBook();
-    void initializeGrowthBook();
 
     // Now that trust is established, prefetch system context if it wasn't already
     void getSystemContext();
@@ -183,11 +182,7 @@ export async function showSetupScreens(root: Root, permissionMode: PermissionMod
   // This includes potentially dangerous environment variables from untrusted sources
   applyConfigEnvironmentVariables();
 
-  // Initialize telemetry after env vars are applied so OTEL endpoint env vars and
-  // otelHeadersHelper (which requires trust to execute) are available.
-  // Defer to next tick so the OTel dynamic import resolves after first render
-  // instead of during the pre-render microtask queue.
-  setImmediate(() => initializeTelemetryAfterTrust());
+  // Telemetry init removed in this build.
   if (await isQualifiedForGrove()) {
     const {
       GroveDialog

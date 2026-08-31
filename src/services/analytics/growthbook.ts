@@ -137,23 +137,10 @@ function callSafe(listener: GrowthBookRefreshListener): void {
  * use isEqual against your last-seen config to decide whether to act.
  */
 export function onGrowthBookRefresh(
-  listener: GrowthBookRefreshListener,
+  _listener: GrowthBookRefreshListener,
 ): () => void {
-  let subscribed = true
-  const unsubscribe = refreshed.subscribe(() => callSafe(listener))
-  if (remoteEvalFeatureValues.size > 0) {
-    queueMicrotask(() => {
-      // Re-check: listener may have been removed, or resetGrowthBook may have
-      // cleared the Map, between registration and this microtask running.
-      if (subscribed && remoteEvalFeatureValues.size > 0) {
-        callSafe(listener)
-      }
-    })
-  }
-  return () => {
-    subscribed = false
-    unsubscribe()
-  }
+  // GrowthBook removed in this build (no-op): never subscribe.
+  return () => {}
 }
 
 /**
@@ -225,10 +212,8 @@ function getConfigOverrides(): Record<string, unknown> | undefined {
  * same priority as the getters. Used by the /config Gates tab.
  */
 export function getAllGrowthBookFeatures(): Record<string, unknown> {
-  if (remoteEvalFeatureValues.size > 0) {
-    return Object.fromEntries(remoteEvalFeatureValues)
-  }
-  return getGlobalConfig().cachedGrowthBookFeatures ?? {}
+  // GrowthBook removed in this build (no-op).
+  return {}
 }
 
 export function getGrowthBookConfigOverrides(): Record<string, unknown> {
@@ -420,8 +405,8 @@ function syncRemoteEvalToDisk(): void {
  * Check if GrowthBook operations should be enabled
  */
 function isGrowthBookEnabled(): boolean {
-  // GrowthBook depends on 1P event logging.
-  return is1PEventLoggingEnabled()
+  // Remote config (GrowthBook) disabled in this build.
+  return false
 }
 
 /**
@@ -489,130 +474,9 @@ function getUserAttributes(): GrowthBookUserAttributes {
  */
 const getGrowthBookClient = memoize(
   (): { client: GrowthBook; initialized: Promise<void> } | null => {
-    if (!isGrowthBookEnabled()) {
-      return null
-    }
-
-    const attributes = getUserAttributes()
-    const clientKey = getGrowthBookClientKey()
-    if (process.env.USER_TYPE === 'ant') {
-      logForDebugging(
-        `GrowthBook: Creating client with clientKey=${clientKey}, attributes: ${jsonStringify(attributes)}`,
-      )
-    }
-    const baseUrl =
-      process.env.USER_TYPE === 'ant'
-        ? process.env.CLAUDE_CODE_GB_BASE_URL || 'https://api.anthropic.com/'
-        : 'https://api.anthropic.com/'
-
-    // Skip auth if trust hasn't been established yet
-    // This prevents executing apiKeyHelper commands before the trust dialog
-    // Non-interactive sessions implicitly have workspace trust
-    // getSessionTrustAccepted() covers the case where the TrustDialog auto-resolved
-    // without persisting trust for the specific CWD (e.g., home directory) —
-    // showSetupScreens() sets this after the trust dialog flow completes.
-    const hasTrust =
-      checkHasTrustDialogAccepted() ||
-      getSessionTrustAccepted() ||
-      getIsNonInteractiveSession()
-    const authHeaders = hasTrust
-      ? getAuthHeaders()
-      : { headers: {}, error: 'trust not established' }
-    const hasAuth = !authHeaders.error
-    clientCreatedWithAuth = hasAuth
-
-    // Capture in local variable so the init callback operates on THIS client,
-    // not a later client if reinitialization happens before init completes
-    const thisClient = new GrowthBook({
-      apiHost: baseUrl,
-      clientKey,
-      attributes,
-      remoteEval: true,
-      // Re-fetch when user ID or org changes (org change = login to different org)
-      cacheKeyAttributes: ['id', 'organizationUUID'],
-      // Add auth headers if available
-      ...(authHeaders.error
-        ? {}
-        : { apiHostRequestHeaders: authHeaders.headers }),
-      // Debug logging for Ants
-      ...(process.env.USER_TYPE === 'ant'
-        ? {
-            log: (msg: string, ctx: Record<string, unknown>) => {
-              logForDebugging(`GrowthBook: ${msg} ${jsonStringify(ctx)}`)
-            },
-          }
-        : {}),
-    })
-    client = thisClient
-
-    if (!hasAuth) {
-      // No auth available yet — skip HTTP init, rely on disk-cached values.
-      // initializeGrowthBook() will reset and re-create with auth when available.
-      return { client: thisClient, initialized: Promise.resolve() }
-    }
-
-    const initialized = thisClient
-      .init({ timeout: 5000 })
-      .then(async result => {
-        // Guard: if this client was replaced by a newer one, skip processing
-        if (client !== thisClient) {
-          if (process.env.USER_TYPE === 'ant') {
-            logForDebugging(
-              'GrowthBook: Skipping init callback for replaced client',
-            )
-          }
-          return
-        }
-
-        if (process.env.USER_TYPE === 'ant') {
-          logForDebugging(
-            `GrowthBook initialized successfully, source: ${result.source}, success: ${result.success}`,
-          )
-        }
-
-        const hadFeatures = await processRemoteEvalPayload(thisClient)
-        // Re-check: processRemoteEvalPayload yields at `await setPayload`.
-        // Microtask-only today (no encryption, no sticky-bucket service), but
-        // the guard at the top of this callback runs before that await;
-        // this runs after.
-        if (client !== thisClient) return
-
-        if (hadFeatures) {
-          for (const feature of pendingExposures) {
-            logExposureForFeature(feature)
-          }
-          pendingExposures.clear()
-          syncRemoteEvalToDisk()
-          // Notify subscribers: remoteEvalFeatureValues is populated and
-          // disk is freshly synced. _CACHED_MAY_BE_STALE reads memory first
-          // (#22295), so subscribers see fresh values immediately.
-          refreshed.emit()
-        }
-
-        // Log what features were loaded
-        if (process.env.USER_TYPE === 'ant') {
-          const features = thisClient.getFeatures()
-          if (features) {
-            const featureKeys = Object.keys(features)
-            logForDebugging(
-              `GrowthBook loaded ${featureKeys.length} features: ${featureKeys.slice(0, 10).join(', ')}${featureKeys.length > 10 ? '...' : ''}`,
-            )
-          }
-        }
-      })
-      .catch(error => {
-        if (process.env.USER_TYPE === 'ant') {
-          logError(toError(error))
-        }
-      })
-
-    // Register cleanup handlers for graceful shutdown (named refs so resetGrowthBook can remove them)
-    currentBeforeExitHandler = () => client?.destroy()
-    currentExitHandler = () => client?.destroy()
-    process.on('beforeExit', currentBeforeExitHandler)
-    process.on('exit', currentExitHandler)
-
-    return { client: thisClient, initialized }
+    // GrowthBook removed in this build (no-op): never create a client,
+    // never fetch remote config.
+    return null
   },
 )
 
@@ -621,45 +485,8 @@ const getGrowthBookClient = memoize(
  */
 export const initializeGrowthBook = memoize(
   async (): Promise<GrowthBook | null> => {
-    let clientWrapper = getGrowthBookClient()
-    if (!clientWrapper) {
-      return null
-    }
-
-    // Check if auth has become available since the client was created
-    // If so, we need to recreate the client with fresh auth headers
-    // Only check if trust is established to avoid triggering apiKeyHelper before trust dialog
-    if (!clientCreatedWithAuth) {
-      const hasTrust =
-        checkHasTrustDialogAccepted() ||
-        getSessionTrustAccepted() ||
-        getIsNonInteractiveSession()
-      if (hasTrust) {
-        const currentAuth = getAuthHeaders()
-        if (!currentAuth.error) {
-          if (process.env.USER_TYPE === 'ant') {
-            logForDebugging(
-              'GrowthBook: Auth became available after client creation, reinitializing',
-            )
-          }
-          // Use resetGrowthBook to properly destroy old client and stop periodic refresh
-          // This prevents double-init where old client's init promise continues running
-          resetGrowthBook()
-          clientWrapper = getGrowthBookClient()
-          if (!clientWrapper) {
-            return null
-          }
-        }
-      }
-    }
-
-    await clientWrapper.initialized
-
-    // Set up periodic refresh after successful initialization
-    // This is called here (not separately) so it's always re-established after any reinit
-    setupPeriodicGrowthBookRefresh()
-
-    return clientWrapper.client
+    // GrowthBook removed in this build (no-op): never initialize a client.
+    return null
   },
 )
 
@@ -941,72 +768,14 @@ export async function checkGate_CACHED_OR_BLOCKING(
  * apiHostRequestHeaders cannot be updated after client creation.
  */
 export function refreshGrowthBookAfterAuthChange(): void {
-  if (!isGrowthBookEnabled()) {
-    return
-  }
-
-  try {
-    // Reset the client completely to get fresh auth headers
-    // This is necessary because apiHostRequestHeaders can't be updated after creation
-    resetGrowthBook()
-
-    // resetGrowthBook cleared remoteEvalFeatureValues. If re-init below
-    // times out (hadFeatures=false) or short-circuits on !hasAuth (logout),
-    // the init-callback notify never fires — subscribers stay synced to the
-    // previous account's memoized state. Notify here so they re-read now
-    // (falls to disk cache). If re-init succeeds, they'll notify again with
-    // fresh values; if not, at least they're synced to the post-reset state.
-    refreshed.emit()
-
-    // Reinitialize with fresh auth headers and attributes
-    // Track this promise so security gate checks can wait for it.
-    // .catch before .finally: initializeGrowthBook can reject if its sync
-    // helpers throw (getGrowthBookClient, getAuthHeaders, resetGrowthBook —
-    // clientWrapper.initialized itself has its own .catch so never rejects),
-    // and .finally re-settles with the original rejection — the sync
-    // try/catch below cannot catch async rejections.
-    reinitializingPromise = initializeGrowthBook()
-      .catch(error => {
-        logError(toError(error))
-        return null
-      })
-      .finally(() => {
-        reinitializingPromise = null
-      })
-  } catch (error) {
-    if (process.env.NODE_ENV === 'development') {
-      throw error
-    }
-    logError(toError(error))
-  }
+  // GrowthBook removed in this build (no-op).
 }
 
 /**
  * Reset GrowthBook client state (primarily for testing)
  */
 export function resetGrowthBook(): void {
-  stopPeriodicGrowthBookRefresh()
-  // Remove process handlers before destroying client to prevent accumulation
-  if (currentBeforeExitHandler) {
-    process.off('beforeExit', currentBeforeExitHandler)
-    currentBeforeExitHandler = null
-  }
-  if (currentExitHandler) {
-    process.off('exit', currentExitHandler)
-    currentExitHandler = null
-  }
-  client?.destroy()
-  client = null
-  clientCreatedWithAuth = false
-  reinitializingPromise = null
-  experimentDataByFeature.clear()
-  pendingExposures.clear()
-  loggedExposures.clear()
-  remoteEvalFeatureValues.clear()
-  getGrowthBookClient.cache?.clear?.()
-  initializeGrowthBook.cache?.clear?.()
-  envOverrides = null
-  envOverridesParsed = false
+  // GrowthBook removed in this build (no-op).
 }
 
 // Periodic refresh interval (matches Statsig's 6-hour interval)
@@ -1025,56 +794,7 @@ let beforeExitListener: (() => void) | null = null
  * this preserves client state and just fetches fresh feature values.
  */
 export async function refreshGrowthBookFeatures(): Promise<void> {
-  if (!isGrowthBookEnabled()) {
-    return
-  }
-
-  try {
-    const growthBookClient = await initializeGrowthBook()
-    if (!growthBookClient) {
-      return
-    }
-
-    await growthBookClient.refreshFeatures()
-
-    // Guard: if this client was replaced during the in-flight refresh
-    // (e.g. refreshGrowthBookAfterAuthChange ran), skip processing the
-    // stale payload. Mirrors the init-callback guard above.
-    if (growthBookClient !== client) {
-      if (process.env.USER_TYPE === 'ant') {
-        logForDebugging(
-          'GrowthBook: Skipping refresh processing for replaced client',
-        )
-      }
-      return
-    }
-
-    // Rebuild remoteEvalFeatureValues from the refreshed payload so that
-    // _BLOCKS_ON_INIT callers (e.g. getMaxVersion for the auto-update kill
-    // switch) see fresh values, not the stale init-time snapshot.
-    const hadFeatures = await processRemoteEvalPayload(growthBookClient)
-    // Same re-check as init path: covers the setPayload yield inside
-    // processRemoteEvalPayload (the guard above only covers refreshFeatures).
-    if (growthBookClient !== client) return
-
-    if (process.env.USER_TYPE === 'ant') {
-      logForDebugging('GrowthBook: Light refresh completed')
-    }
-
-    // Gate on hadFeatures: if the payload was empty/malformed,
-    // remoteEvalFeatureValues wasn't rebuilt — skip both the no-op disk
-    // write and the spurious subscriber churn (clearCommandMemoizationCaches
-    // + getCommands + 4× model re-renders).
-    if (hadFeatures) {
-      syncRemoteEvalToDisk()
-      refreshed.emit()
-    }
-  } catch (error) {
-    if (process.env.NODE_ENV === 'development') {
-      throw error
-    }
-    logError(toError(error))
-  }
+  // GrowthBook removed in this build (no-op).
 }
 
 /**
@@ -1085,28 +805,7 @@ export async function refreshGrowthBookFeatures(): Promise<void> {
  * feature values stay fresh. Matches Statsig's 6-hour refresh interval.
  */
 export function setupPeriodicGrowthBookRefresh(): void {
-  if (!isGrowthBookEnabled()) {
-    return
-  }
-
-  // Clear any existing interval to avoid duplicates
-  if (refreshInterval) {
-    clearInterval(refreshInterval)
-  }
-
-  refreshInterval = setInterval(() => {
-    void refreshGrowthBookFeatures()
-  }, GROWTHBOOK_REFRESH_INTERVAL_MS)
-  // Allow process to exit naturally - this timer shouldn't keep the process alive
-  refreshInterval.unref?.()
-
-  // Register cleanup listener only once
-  if (!beforeExitListener) {
-    beforeExitListener = () => {
-      stopPeriodicGrowthBookRefresh()
-    }
-    process.once('beforeExit', beforeExitListener)
-  }
+  // GrowthBook removed in this build (no-op).
 }
 
 /**

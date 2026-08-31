@@ -560,9 +560,7 @@ export async function runHeadless(
   }
   headlessProfilerCheckpoint('after_grove_check')
 
-  // Initialize GrowthBook so feature flags take effect in headless mode.
-  // Without this, the disk cache is empty and all flags fall back to defaults.
-  void initializeGrowthBook()
+  // GrowthBook init removed in this build.
 
   if (options.resumeSessionAt && !options.resume) {
     process.stderr.write(`Error: --resume-session-at requires --resume\n`)
