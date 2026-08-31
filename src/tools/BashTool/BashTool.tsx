@@ -54,7 +54,7 @@ const EOL = '\n';
 // Progress display constants
 const PROGRESS_THRESHOLD_MS = 2000; // Show progress after 2 seconds
 // In assistant mode, blocking bash auto-backgrounds after this many ms in the main agent
-const ASSISTANT_BLOCKING_BUDGET_MS = 15_000;
+const ASSISTANT_BLOCKING_BUDGET_MS = 120_000;
 
 // Search commands for collapsible display (grep, find, etc.)
 const BASH_SEARCH_COMMANDS = new Set(['find', 'grep', 'rg', 'ag', 'ack', 'locate', 'which', 'whereis']);
@@ -420,8 +420,8 @@ async function applySedEdit(simulatedEdit: {
 export const BashTool = buildTool({
   name: BASH_TOOL_NAME,
   searchHint: 'execute shell commands',
-  // 30K chars - tool result persistence threshold
-  maxResultSizeChars: 30_000,
+  // 50K chars - tool result persistence threshold
+  maxResultSizeChars: 50_000,
   strict: true,
   async description({
     description
@@ -728,8 +728,7 @@ export const BashTool = buildTool({
     // Large output: the file on disk has more than getMaxOutputLength() bytes.
     // stdout already contains the first chunk (from getStdout()). Copy the
     // output file to the tool-results dir so the model can read it via
-    // FileRead. If > 64 MB, truncate after copying.
-    const MAX_PERSISTED_SIZE = 64 * 1024 * 1024;
+    // FileRead. No truncation — the full output is preserved.
     let persistedOutputPath: string | undefined;
     let persistedOutputSize: number | undefined;
     if (result.outputFilePath && result.outputTaskId) {
@@ -738,9 +737,6 @@ export const BashTool = buildTool({
         persistedOutputSize = fileStat.size;
         await ensureToolResultsDir();
         const dest = getToolResultPath(result.outputTaskId, false);
-        if (fileStat.size > MAX_PERSISTED_SIZE) {
-          await fsTruncate(result.outputFilePath, MAX_PERSISTED_SIZE);
-        }
         try {
           await link(result.outputFilePath, dest);
         } catch {

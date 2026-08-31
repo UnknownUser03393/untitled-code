@@ -154,7 +154,7 @@ export const GlobTool = buildTool({
   async call(input, { abortController, getAppState, globLimits }) {
     const start = Date.now()
     const appState = getAppState()
-    const limit = globLimits?.maxResults ?? 100
+    const limit = globLimits?.maxResults ?? 1000
     const { files, truncated } = await glob(
       input.pattern,
       GlobTool.getPath(input),

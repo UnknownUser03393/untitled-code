@@ -96,7 +96,7 @@ const FETCH_TIMEOUT_MS = 60_000
 const MAX_REDIRECTS = 10
 
 // Truncate to not spend too many tokens
-export const MAX_MARKDOWN_LENGTH = 100_000
+export const MAX_MARKDOWN_LENGTH = 200_000
 
 export function isPreapprovedUrl(url: string): boolean {
   try {

@@ -36,7 +36,16 @@ export type ModelName = string
 export type ModelSetting = ModelName | ModelAlias | null
 
 export function getSmallFastModel(): ModelName {
-  return process.env.ANTHROPIC_SMALL_FAST_MODEL || getDefaultHaikuModel()
+  if (process.env.ANTHROPIC_SMALL_FAST_MODEL) {
+    return process.env.ANTHROPIC_SMALL_FAST_MODEL
+  }
+  // Third-party models (e.g. deepseek/...) don't serve claude-haiku-4-5 —
+  // fall back to the main model so auxiliary/background calls don't 400.
+  const mainModel = getMainLoopModel()
+  if (mainModel && !mainModel.startsWith('claude')) {
+    return mainModel
+  }
+  return getDefaultHaikuModel()
 }
 
 export function isNonCustomOpusModel(model: ModelName): boolean {

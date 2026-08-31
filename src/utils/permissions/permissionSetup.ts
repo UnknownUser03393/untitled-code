@@ -936,9 +936,10 @@ export async function initializeToolPermissionContext({
   const settings = getSettings_DEPRECATED() || {}
   const settingsDisableBypassPermissionsMode =
     settings.permissions?.disableBypassPermissionsMode === 'disable'
+  // Bypass mode is reachable from a normal start (shift+tab cycle). The
+  // chicken-and-egg guard that required already being in bypassPermissions
+  // mode was removed — the org/settings kill-switches below are the only gates.
   const isBypassPermissionsModeAvailable =
-    (permissionMode === 'bypassPermissions' ||
-      allowDangerouslySkipPermissions) &&
     !growthBookDisableBypassPermissionsMode &&
     !settingsDisableBypassPermissionsMode
 

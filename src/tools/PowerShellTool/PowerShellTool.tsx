@@ -159,7 +159,7 @@ function isSearchOrReadPowerShellCommand(command: string): {
 const PROGRESS_THRESHOLD_MS = 2000;
 const PROGRESS_INTERVAL_MS = 1000;
 // In assistant mode, blocking commands auto-background after this many ms in the main agent
-const ASSISTANT_BLOCKING_BUDGET_MS = 15_000;
+const ASSISTANT_BLOCKING_BUDGET_MS = 120_000;
 
 // Commands that should not be auto-backgrounded (canonical lowercase).
 // 'sleep' is a PS built-in alias for Start-Sleep but not in COMMON_ALIASES,
@@ -593,7 +593,6 @@ export const PowerShellTool = buildTool({
       // ordering, where persistence is post-try/finally): a failing command
       // that also produced >maxOutputLength bytes would otherwise do 3-4 disk
       // syscalls, store to tool-results/, then throw — orphaning the file.
-      const MAX_PERSISTED_SIZE = 64 * 1024 * 1024;
       let persistedOutputPath: string | undefined;
       let persistedOutputSize: number | undefined;
       if (result.outputFilePath && result.outputTaskId) {
@@ -602,9 +601,6 @@ export const PowerShellTool = buildTool({
           persistedOutputSize = fileStat.size;
           await ensureToolResultsDir();
           const dest = getToolResultPath(result.outputTaskId, false);
-          if (fileStat.size > MAX_PERSISTED_SIZE) {
-            await fsTruncate(result.outputFilePath, MAX_PERSISTED_SIZE);
-          }
           try {
             await link(result.outputFilePath, dest);
           } catch {

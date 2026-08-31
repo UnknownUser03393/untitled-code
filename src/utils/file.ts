@@ -45,7 +45,7 @@ export async function pathExists(path: string): Promise<boolean> {
   }
 }
 
-export const MAX_OUTPUT_SIZE = 0.25 * 1024 * 1024 // 0.25MB in bytes
+export const MAX_OUTPUT_SIZE = 4 * 1024 * 1024 // 4MB in bytes
 
 export function readFileSafe(filepath: string): string | null {
   try {

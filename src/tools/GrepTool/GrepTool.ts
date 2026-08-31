@@ -160,8 +160,8 @@ type Output = z.infer<OutputSchema>
 export const GrepTool = buildTool({
   name: GREP_TOOL_NAME,
   searchHint: 'search file contents with regex (ripgrep)',
-  // 20K chars - tool result persistence threshold
-  maxResultSizeChars: 20_000,
+  // 50K chars - tool result persistence threshold
+  maxResultSizeChars: 50_000,
   strict: true,
   async description() {
     return getDescription()
@@ -333,9 +333,6 @@ export const GrepTool = buildTool({
     for (const dir of VCS_DIRECTORIES_TO_EXCLUDE) {
       args.push('--glob', `!${dir}`)
     }
-
-    // Limit line length to prevent base64/minified content from cluttering output
-    args.push('--max-columns', '500')
 
     // Only apply multiline flags when explicitly requested
     if (multiline) {
