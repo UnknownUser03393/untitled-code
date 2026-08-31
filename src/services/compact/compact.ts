@@ -224,6 +224,63 @@ export function stripReinjectedAttachments(messages: Message[]): Message[] {
   return messages
 }
 
+// Deterministic tool-result pruning before compaction.
+// Mirrors deepseek-harness compaction-tool-result-pruner: keep head+tail,
+// replace the middle with a stable marker. Images/documents are left alone.
+const TOOL_RESULT_PRUNE_THRESHOLD_CHARS = 8192
+const TOOL_RESULT_PRUNE_HEAD_CHARS = 4096
+const TOOL_RESULT_PRUNE_TAIL_CHARS = 1024
+const TOOL_RESULT_PRUNE_MARKER = '\n\n[... tool result middle pruned ...]\n\n'
+
+function pruneToolResultText(text: string): string {
+  return (
+    text.slice(0, TOOL_RESULT_PRUNE_HEAD_CHARS) +
+    TOOL_RESULT_PRUNE_MARKER +
+    text.slice(-TOOL_RESULT_PRUNE_TAIL_CHARS)
+  )
+}
+
+/**
+ * Deterministically trim oversized tool-result text before summarization.
+ * Saves tokens with zero LLM cost: the summarizer sees a smaller prefix.
+ * Returns the original array when nothing changed.
+ */
+export function pruneOversizedToolResults(messages: Message[]): Message[] {
+  let touched = false
+  const result = messages.map(message => {
+    if (message.type !== 'user' || !Array.isArray(message.message.content)) {
+      return message
+    }
+    let msgTouched = false
+    const newContent = message.message.content.map(block => {
+      if (block.type !== 'tool_result') return block
+      const content = block.content
+      if (typeof content === 'string') {
+        if (content.length <= TOOL_RESULT_PRUNE_THRESHOLD_CHARS) return block
+        msgTouched = true
+        return { ...block, content: pruneToolResultText(content) }
+      }
+      if (Array.isArray(content)) {
+        const newBlocks = content.map(item => {
+          if (item.type !== 'text') return item
+          if (item.text.length <= TOOL_RESULT_PRUNE_THRESHOLD_CHARS) return item
+          msgTouched = true
+          return { ...item, text: pruneToolResultText(item.text) }
+        })
+        return { ...block, content: newBlocks }
+      }
+      return block
+    })
+    if (!msgTouched) return message
+    touched = true
+    return {
+      ...message,
+      message: { ...message.message, content: newContent },
+    }
+  })
+  return touched ? result : messages
+}
+
 export const ERROR_MESSAGE_NOT_ENOUGH_MESSAGES =
   'Not enough messages to compact.'
 const MAX_PTL_RETRIES = 3
@@ -400,7 +457,11 @@ export async function compactConversation(
       throw new Error(ERROR_MESSAGE_NOT_ENOUGH_MESSAGES)
     }
 
-    const preCompactTokenCount = tokenCountWithEstimation(messages)
+    // Deterministically trim oversized tool results before summarizing —
+    // free token savings, keeps huge tool output out of the summarizer input.
+    // Mirrors deepseek-harness compaction-tool-result-pruner.
+    const prunedMessages = pruneOversizedToolResults(messages)
+    const preCompactTokenCount = tokenCountWithEstimation(prunedMessages)
 
     const appState = context.getAppState()
     void logPermissionContextForAnts(appState.toolPermissionContext, 'summary')
@@ -444,7 +505,7 @@ export async function compactConversation(
       content: compactPrompt,
     })
 
-    let messagesToSummarize = messages
+    let messagesToSummarize = prunedMessages
     let retryCacheSafeParams = cacheSafeParams
     let summaryResponse: AssistantMessage
     let summary: string | null
@@ -514,6 +575,25 @@ export async function compactConversation(
         promptCacheSharingEnabled,
       })
       throw new Error(summary)
+    }
+
+    // Shrink-gate: a summary must be smaller than the content it replaces,
+    // or compaction would grow the context instead of shrinking it.
+    // Mirrors deepseek-harness compaction-basic/src/region.ts shrink-gate.
+    const shadowedTokenCount = roughTokenCountEstimationForMessages(
+      messagesToSummarize as Parameters<
+        typeof roughTokenCountEstimationForMessages
+      >[0],
+    )
+    const summaryTokenCount = roughTokenCountEstimation(summary)
+    if (summaryTokenCount >= shadowedTokenCount) {
+      logEvent('tengu_compact_shrink_gate_rejected', {
+        summaryTokenCount,
+        shadowedTokenCount,
+      })
+      throw new Error(
+        `Compaction failed: generated summary is not smaller than the content it replaces (${summaryTokenCount} >= ${shadowedTokenCount})`,
+      )
     }
 
     // Store the current file state before clearing
@@ -1272,24 +1352,13 @@ async function streamCompactSummary({
         'compact',
       )
 
-      // When tool search is enabled, include ToolSearchTool and MCP tools. They get
-      // defer_loading: true and don't count against context - the API filters them out
-      // of system_prompt_tools before token counting (see api/token_count_api/counting.py:188
-      // and api/public_api/messages/handler.py:324).
-      // Filter MCP tools from context.options.tools (not appState.mcp.tools) so we
-      // get the permission-filtered set from useMergedTools — same source used for
-      // isToolSearchEnabled above and normalizeMessagesForAPI below.
-      // Deduplicate by name to avoid API errors when MCP tools share names with built-in tools.
-      const tools: Tool[] = useToolSearch
-        ? uniqBy(
-            [
-              FileReadTool,
-              ToolSearchTool,
-              ...context.options.tools.filter(t => t.isMcp),
-            ],
-            'name',
-          )
-        : [FileReadTool]
+      // Keep the full main-conversation tool set so the fallback request is a
+      // byte-identical prefix extension of the main request — prompt cache stays
+      // warm even on the fallback path. The compact instruction below constrains
+      // the model to output a summary without calling tools. Mirrors
+      // deepseek-harness summarizer.ts KV-cache-aligned summary (tools ride
+      // along for cache alignment even though the summarizer never invokes them).
+      const tools: Tool[] = context.options.tools
 
       const streamingGen = queryModelWithStreaming({
         messages: normalizeMessagesForAPI(
@@ -1301,9 +1370,12 @@ async function streamCompactSummary({
           ),
           context.options.tools,
         ),
-        systemPrompt: asSystemPrompt([
-          'You are a helpful AI assistant tasked with summarizing conversations.',
-        ]),
+        systemPrompt:
+          cacheSafeParams.systemPrompt.length > 0
+            ? cacheSafeParams.systemPrompt
+            : asSystemPrompt([
+                'You are a helpful AI assistant tasked with summarizing conversations.',
+              ]),
         thinkingConfig: { type: 'disabled' as const },
         tools,
         signal: context.abortController.signal,
