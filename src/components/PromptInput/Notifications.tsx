@@ -5,12 +5,10 @@ import { type ReactNode, useEffect, useMemo, useState } from 'react';
 import { type Notification, useNotifications } from 'src/context/notifications.js';
 import { logEvent } from 'src/services/analytics/index.js';
 import { useAppState } from 'src/state/AppState.js';
-import { useVoiceState } from '../../context/voice.js';
 import type { VerificationStatus } from '../../hooks/useApiKeyVerification.js';
 import { useIdeConnectionStatus } from '../../hooks/useIdeConnectionStatus.js';
 import type { IDESelection } from '../../hooks/useIdeSelection.js';
 import { useMainLoopModel } from '../../hooks/useMainLoopModel.js';
-import { useVoiceEnabled } from '../../hooks/useVoiceEnabled.js';
 import { Box, Text } from '../../ink.js';
 import { useClaudeAiLimits } from '../../services/claudeAiLimitsHook.js';
 import { calculateTokenWarningState } from '../../services/compact/autoCompact.js';
@@ -34,7 +32,6 @@ import { TokenWarning } from '../TokenWarning.js';
 import { SandboxPromptFooterHint } from './SandboxPromptFooterHint.js';
 
 /* eslint-disable @typescript-eslint/no-require-imports */
-const VoiceIndicator: typeof import('./VoiceIndicator.js').VoiceIndicator = feature('VOICE_MODE') ? require('./VoiceIndicator.js').VoiceIndicator : () => null;
 /* eslint-enable @typescript-eslint/no-require-imports */
 
 export const FOOTER_TEMPORARY_STATUS_TIMEOUT = 5000;
@@ -265,24 +262,15 @@ function NotificationContent({
     return () => clearInterval(interval);
   }, []);
 
-  // Voice state (VOICE_MODE builds only, runtime-gated by GrowthBook)
-  const voiceState = feature('VOICE_MODE') ?
-  // biome-ignore lint/correctness/useHookAtTopLevel: feature() is a compile-time constant
-  useVoiceState(s => s.voiceState) : 'idle' as const;
-  // biome-ignore lint/correctness/useHookAtTopLevel: feature() is a compile-time constant
-  const voiceEnabled = feature('VOICE_MODE') ? useVoiceEnabled() : false;
-  const voiceError = feature('VOICE_MODE') ?
-  // biome-ignore lint/correctness/useHookAtTopLevel: feature() is a compile-time constant
-  useVoiceState(s_0 => s_0.voiceError) : null;
+  // Voice state (VOICE_MODE removed in this build)
+  const voiceState = 'idle' as const;
+  const voiceEnabled = false;
+  const voiceError = null;
   const isBriefOnly = feature('KAIROS') || feature('KAIROS_BRIEF') ?
   // biome-ignore lint/correctness/useHookAtTopLevel: feature() is a compile-time constant
   useAppState(s_1 => s_1.isBriefOnly) : false;
 
-  // When voice is actively recording or processing, replace all
-  // notifications with just the voice indicator.
-  if (feature('VOICE_MODE') && voiceEnabled && (voiceState === 'recording' || voiceState === 'processing')) {
-    return <VoiceIndicator voiceState={voiceState} />;
-  }
+  // Voice indicator removed in this build.
   return <>
       <IdeStatusIndicator ideSelection={ideSelection} mcpClients={mcpClients} />
       {notifications.current && ('jsx' in notifications.current ? <Text wrap="truncate" key={notifications.current.key}>

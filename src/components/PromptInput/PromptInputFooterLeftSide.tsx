@@ -32,9 +32,6 @@ import { Byline } from '../design-system/Byline.js';
 import { useTerminalSize } from '../../hooks/useTerminalSize.js';
 import { useTasksV2 } from '../../hooks/useTasksV2.js';
 import { formatDuration } from '../../utils/format.js';
-import { VoiceWarmupHint } from './VoiceIndicator.js';
-import { useVoiceEnabled } from '../../hooks/useVoiceEnabled.js';
-import { useVoiceState } from '../../context/voice.js';
 import { isFullscreenEnvEnabled } from '../../utils/fullscreen.js';
 import { isXtermJs } from '../../ink/terminal.js';
 import { useHasSelection, useSelection } from '../../ink/hooks/use-selection.js';
@@ -262,14 +259,9 @@ function ModeIndicator({
   const prStatus = usePrStatus(isLoading, isPrStatusEnabled());
   const hasTmuxSession = useAppState(s_4 => ("external" as string) === 'ant' && s_4.tungstenActiveSession !== undefined);
   const nextTickAt = useSyncExternalStore(proactiveModule?.subscribeToProactiveChanges ?? NO_OP_SUBSCRIBE, proactiveModule?.getNextTickAt ?? NULL, NULL);
-  // biome-ignore lint/correctness/useHookAtTopLevel: feature() is a compile-time constant
-  const voiceEnabled = feature('VOICE_MODE') ? useVoiceEnabled() : false;
-  const voiceState = feature('VOICE_MODE') ?
-  // biome-ignore lint/correctness/useHookAtTopLevel: feature() is a compile-time constant
-  useVoiceState(s_5 => s_5.voiceState) : 'idle' as const;
-  const voiceWarmingUp = feature('VOICE_MODE') ?
-  // biome-ignore lint/correctness/useHookAtTopLevel: feature() is a compile-time constant
-  useVoiceState(s_6 => s_6.voiceWarmingUp) : false;
+  const voiceEnabled = false;
+  const voiceState = 'idle' as const;
+  const voiceWarmingUp = false;
   const hasSelection = useHasSelection();
   const selGetState = useSelection().getState;
   const hasNextTick = nextTickAt !== null;
@@ -419,11 +411,7 @@ function ModeIndicator({
   const copyOnSelect = getGlobalConfig().copyOnSelect ?? true;
   const selectionHintHasContent = hasSelection && (!copyOnSelect || isXtermJs());
 
-  // Warmup hint takes priority — when the user is actively holding
-  // the activation key, show feedback regardless of other hints.
-  if (feature('VOICE_MODE') && voiceEnabled && voiceWarmingUp) {
-    parts.push(<VoiceWarmupHint key="voice-warmup" />);
-  } else if (isFullscreenEnvEnabled() && selectionHintHasContent) {
+  if (isFullscreenEnvEnabled() && selectionHintHasContent) {
     // xterm.js (VS Code/Cursor/Windsurf) force-selection modifier is
     // platform-specific and gated on macOS (SelectionService.shouldForceSelection):
     //   macOS:     altKey && macOptionClickForcesSelection (VS Code default: false)

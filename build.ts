@@ -50,6 +50,13 @@ const result = await build({
   platform: 'node',
   target: 'node20',
   format: 'esm',
+  // USER_TYPE is a runtime env var in this codebase (not a Bun --define). Fix it
+  // to 'external' at build time so every `=== 'ant'` branch constant-folds to
+  // false and the ant-only modules (agents-platform, INTERNAL_ONLY_COMMANDS,
+  // undercover, etc.) are dead-code-eliminated out of the bundle.
+  define: {
+    'process.env.USER_TYPE': '"external"',
+  },
   splitting: false,
   sourcemap: false,
   logLevel: 'info',
